@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Архитектор таланта — Zen</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#faf7f2">
+  <link rel="icon" sizes="192x192" href="icon-192.png">
+  <link rel="icon" sizes="512x512" href="icon-512.png">
+  <style>
+    :root { --paper:#FAF7F2; --ink:#1A1A1A; --accent:#BB2A2A; --stroke:#E5D8C8; }
+    html,body { margin:0; padding:0; background:var(--paper); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wave { background-image: radial-gradient(circle at 10px 10px, rgba(0,0,0,0.04) 1.5px, transparent 1.6px); background-size:22px 22px; min-height:100vh; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+    .title { font-size: 24px; font-weight: 700; }
+    .muted { opacity:.75 }
+    .card { background: rgba(255,255,255,.85); border:1px solid var(--stroke); border-radius:16px; padding:14px; backdrop-filter: blur(6px); }
+    .btn { border:1px solid var(--stroke); background:white; padding:8px 12px; border-radius:10px; cursor:pointer; }
+    .btn.accent { background: var(--accent); color: white; border-color: var(--accent); }
+    .tabs { display:grid; grid-template-columns: repeat(7,1fr); gap:6px; }
+    .tab { font-size:12px; padding:8px; border:1px solid var(--stroke); border-radius:10px; background:white; text-align:center; cursor:pointer; }
+    .tab.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+    .inline-dot { display:inline-block; width:6px; height:16px; border-radius:2px; background:var(--accent); margin-right:6px; vertical-align:middle; }
+    .progress { height:8px; background:#eee; border-radius:10px; overflow:hidden; }
+    .progress > div { height:100%; background: var(--accent); width:0%; transition: width .2s; }
+    .task { border:1px solid var(--stroke); border-radius:12px; padding:8px; margin-bottom:8px; background:white; }
+    .check { width:20px; height:20px; border:1px solid var(--stroke); border-radius:6px; display:inline-flex; align-items:center; justify-content:center; margin-right:8px; }
+    .check.done { background:#E9F7E9; border-color:#2E7D32; }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display:none; }
+    .slogan { font-style: italic; font-size: 12px; opacity:.75; padding-left: 28px; white-space: pre-line; }
+    .list { padding-left: 18px; }
+    .pill { display:inline-flex; align-items:center; gap:8px; }
+    input, select { padding:8px 10px; border:1px solid var(--stroke); border-radius:10px; }
+  </style>
+</head>
+<body class="wave">
+  <div class="wrap">
+    <div class="row">
+      <div>
+        <div class="title">建築家の道 — Архитектор таланта · Zen Edition</div>
+        <div class="muted">6-месячная программа: чек-листы, хоку, таймер, Google Calendar</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="exportBtn">Экспорт</button>
+        <label class="btn">Импорт <input id="importInput" type="file" accept="application/json" style="display:none"></label>
+        <button class="btn" id="resetBtn">Сброс</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="row">
+        <div class="pill"><span class="inline-dot"></span><b>Общий прогресс</b></div>
+        <div class="muted" id="overallLbl">0%</div>
+      </div>
+      <div class="progress"><div id="overallBar"></div></div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="pill"><span class="inline-dot"></span><b>Инсайт недели（気づき）</b></div>
+      <div class="row" style="margin-top:8px; gap:8px">
+        <input id="insightInput" placeholder="О чём главный инсайт на этой неделе?" />
+        <button class="btn accent" id="addInsightBtn">Добавить</button>
+      </div>
+      <ul id="insightList" class="list"></ul>
+    </div>
+
+    <div class="tabs" style="margin-top:10px" id="tabs"></div>
+    <div id="monthView" style="margin-top:10px"></div>
+  </div>
+
+  <script>
+    // --------- DATA (months, seed checklists, slogans) ----------
+    const SEED = {
+      m1t1: ["Собрать список проектов","Карта ролей и времени","Выявить зависимости от меня","Найти точки автоматизации","Решения и владельцы"],
+      m1t2: ["MindMap: люди/процессы/деньги/цели","Входы и выходы процессов","Бутылочные горлышки","Метрики по ключевым узлам","2 эксперимента на улучшение"],
+      m1t3: ["Выбрать ежедневный слот","Отключить отвлечения","3 ключевые задачи","Сессия 90 минут","Итог в журнал"],
+      m1t4: ["Шаблон заметки","10 идей/наблюдений","Теги по областям","Выбор 1 идеи в работу","План проверки"],
+      m2t1: ["Выбрать 3 компании","Собрать данные","Смоделировать систему","Выявить петли и узкие места","Сформулировать уроки"],
+      m2t2: ["Определить решение","Влияние +1 шаг","Влияние +2 шага","Влияние +3 шага","Риски и правило принятия"],
+      m2t3: ["Замер базовой метрики","Найти 3 вида потерь","Эксперимент улучшения","Повторный замер","Закрепить стандарт"],
+      m3t1: ["Ценность и аудитория","Гипотезы MVP","Черновая юнит-экономика","Критерии успеха","План запуска"],
+      m3t2: ["5 интервью","Синтез инсайтов","Идеи 10х","Прототип","Тест и итерация"],
+      m3t3: ["Карта ценности/структуры/экономики","Свимлейны процессов","Доходы/затраты","Риски и допущения","Метрики управления"],
+      m4t1: ["Само-оценка SD","Оценка команды","Карта стадий по ролям","План роста","Коммуникации и мотивация"],
+      m4t2: ["Цели на год/квартал","Ценности и принципы","Структура и роли","Метрики и дашборд","Дорожная карта"],
+      m4t3: ["Матрица эффективности","1:1 встречи","План развития/выхода","План найма","Коммуникация решений"],
+      m5t1: ["Описание процесса","SOP и чек-листы","Назначить владельца","Пилот 1 неделя","Разбор и донастройка"],
+      m5t2: ["KPIs: время/прибыль/качество","Целевые значения","Дашборд","Еженедельный обзор","Триггеры оповещений"],
+      m5t3: ["Карта потока","Идентифицировать ограничение","Эксплуатировать","Подчинить остальные","Повысить/повторить"],
+      m6t1: ["RACI по ключевым зонам","Обучение и ввод","Регламенты","Обратная связь","Исключить себя из операционки"],
+      m6t2: ["3 принципа","3 шаблона","3 инструмента","Общий документ","Месячный обзор"],
+      m6t3: ["Выбор новой сферы","Адаптация плейбука","Первый клиент/пилот","Пакетирование предложения","План масштабирования"],
+    };
+    const SLOGANS = {
+      m1t1: "Тихо считать — видно, где шумит.\n「静かに数えれば、乱れが見える」",
+      m1t2: "Нитью связав — видишь узор.\n「糸を結べば、模様が現れる」",
+      m1t3: "Один вдох — одна капля труда.\n「一息一滴、道を磨く」",
+      m1t4: "Пар от кастрюли — мысль на бумаге.\n「湯気の先に、言葉が降る」",
+      m2t1: "Меню из причин — подают следствия.\n「因の膳、果の膳」",
+      m2t2: "Три шага дальше — сердце решает.\n「三歩先、心が決める」",
+      m2t3: "Соль не видна, но вкус меняет всё.\n「塩は見えずとも、味を変える」",
+      m3t1: "Клинок идеи — тонок, но остёр.\n「薄き刃、よく切れる」",
+      m3t2: "Сначала слушай — потом варить.\n「先ず聴き、後に煮る」",
+      m3t3: "Карта дорог — не дорога. Иди.\n「図は道に非ず、歩め」",
+      m4t1: "Ветер укажет, где парус поставить.\n「風は帆の場所を教える」",
+      m4t2: "Чаша пустая — для общего чая.\n「空の茶碗に、皆の湯」",
+      m4t3: "Острый нож — не для всех блюд.\n「鋭き刃、選びて使う」",
+      m5t1: "Маленькая печь — тёплая кухня.\n「小さき竈も、台所を温む」",
+      m5t2: "Циферблат честен — не льстит повару.\n「盤面は正直、料理人を諫む」",
+      m5t3: "Сначала горлышко — потом кувшин.\n「まず瓶の口、次に瓶」",
+      m6t1: "Отдай ложку — сохрани рецепт.\n「匙を渡し、秘伝を残す」",
+      m6t2: "Три камня — очаг пути.\n「三つの石に、道の火」",
+      m6t3: "Новая пристань — тот же океан.\n「港は新しくとも、海は同じ」",
+    };
+    const MONTHS = [
+      { id:'m1', title:'Месяц 1 — Диагностика и фокус', goal:'Понять текущее состояние и выстроить фундамент системного мышления.',
+        metrics:['1 карта систем','10+ идей улучшений'],
+        tasks:[
+          { id:'m1t1', text:'Аудит проектов: что работает без меня, что висит на мне', done:false, deadline:'', remind:false, items:[] },
+          { id:'m1t2', text:'Карта систем (MindMap) — связи людей, задач, денег, целей', done:false, deadline:'', remind:false, items:[] },
+          { id:'m1t3', text:'Практика Deep Work: 2–3 ч/день без отвлечений', done:false, deadline:'', remind:false, items:[] },
+          { id:'m1t4', text:'Журнал наблюдений: идеи и процессы на улучшение', done:false, deadline:'', remind:false, items:[] },
+        ]},
+      { id:'m2', title:'Месяц 2 — Прокачка системного мышления', goal:'Видеть причинно-следственные связи и строить автономные механизмы.',
+        metrics:['3 системы разобраны','1 процесс улучшен'],
+        tasks:[
+          { id:'m2t1', text:'Разбор 3 компаний как систем (идея→структура→люди→процессы→результат)', done:false, deadline:'', remind:false, items:[] },
+          { id:'m2t2', text:'Вопрос к решениям: как это повлияет на систему через 3 шага?', done:false, deadline:'', remind:false, items:[] },
+          { id:'m2t3', text:'Lean: найти 3 узких места и устранить их', done:false, deadline:'', remind:false, items:[] },
+        ]},
+      { id:'m3', title:'Месяц 3 — Архитектура идей', goal:'Соединить креатив и структуру в новой концепции.',
+        metrics:['1 готовая концепция','3 проверенные гипотезы'],
+        tasks:[
+          { id:'m3t1', text:'Новая концепция (продукт/бизнес/меню)', done:false, deadline:'', remind:false, items:[] },
+          { id:'m3t2', text:'Design Thinking: исследование→идея→прототип→тест', done:false, deadline:'', remind:false, items:[] },
+          { id:'m3t3', text:'Визуальная карта: ценность, структура, экономика', done:false, deadline:'', remind:false, items:[] },
+        ]},
+      { id:'m4', title:'Месяц 4 — Лидерство и влияние', goal:'Усилить вдохновение людей и структурирование команды.',
+        metrics:['1 стратегическая сессия','1 изменение в команде'],
+        tasks:[
+          { id:'m4t1', text:'Пройти Spiral Dynamics и оценить команду', done:false, deadline:'', remind:false, items:[] },
+          { id:'m4t2', text:'Стратегическая сессия: цели→ценности→структура→метрики', done:false, deadline:'', remind:false, items:[] },
+          { id:'m4t3', text:'Решение по людям: кого развивать, кого отпустить', done:false, deadline:'', remind:false, items:[] },
+        ]},
+      { id:'m5', title:'Месяц 5 — Реализация и оптимизация', goal:'Построить прототип системы, работающей без тебя.',
+        metrics:['1 автономный процесс 1+ неделю'],
+        tasks:[
+          { id:'m5t1', text:'Пилот/мини-система (автономно)', done:false, deadline:'', remind:false, items:[] },
+          { id:'m5t2', text:'Метрики: время, прибыль, качество', done:false, deadline:'', remind:false, items:[] },
+          { id:'m5t3', text:'Устранение бутылочных горлышек (TOC)', done:false, deadline:'', remind:false, items:[] },
+        ]},
+      { id:'m6', title:'Месяц 6 — Масштабирование и свобода', goal:'Создать систему систем и закрепить делегирование.',
+        metrics:['1 система без контроля','1 новый масштабный проект'],
+        tasks:[
+          { id:'m6t1', text:'Делегирование и регламенты', done:false, deadline:'', remind:false, items:[] },
+          { id:'m6t2', text:'Философия архитектора: 3 принципа/3 шаблона/3 инструмента', done:false, deadline:'', remind:false, items:[] },
+          { id:'m6t3', text:'Перенос подхода в новую сферу (консалтинг/франшиза/образование)', done:false, deadline:'', remind:false, items:[] },
+        ]},
+    ];
+
+    const STORAGE_KEY = 'ta_zen_state_v1';
+    function seedIfEmpty(task) {
+      if (!task.items || task.items.length === 0) {
+        task.items = (SEED[task.id] || ["Определить шаги","Сделать","Проверить","Зафиксировать"]).map((txt,i)=>({ id: task.id+'-seed-'+i, text: txt, done: false }));
+      }
+    }
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || { months: MONTHS, insights: [], active: 'm1' };
+    state.months.forEach(m => m.tasks.forEach(seedIfEmpty));
+
+    // --------- Helpers ----------
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function progressAll() {
+      const all = state.months.flatMap(m=>m.tasks);
+      const total = all.length || 1;
+      const done = all.filter(t=>t.done).length;
+      return Math.round(done/total*100);
+    }
+    function buildGCalUrl(title, start, end, details="") {
+      const pad=n=>String(n).padStart(2,'0');
+      const fmt=d=>`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+      const s=fmt(start), e=fmt(end);
+      return `https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(title)}&dates=${s}/${e}&details=${encodeURIComponent(details)}`;
+    }
+
+    // --------- Render ----------
+    const tabs = document.getElementById('tabs');
+    const mv = document.getElementById('monthView');
+    const overallLbl = document.getElementById('overallLbl');
+    const overallBar = document.getElementById('overallBar');
+
+    function render() {
+      // tabs
+      tabs.innerHTML='';
+      [...state.months.map(m=>m.id), 'principles'].forEach(id => {
+        const b=document.createElement('button');
+        b.className='tab ' + (state.active===id?'active':'');
+        b.textContent=id.toUpperCase();
+        b.onclick=()=>{state.active=id; save(); render();};
+        tabs.appendChild(b);
+      });
+
+      // progress
+      const pct = progressAll();
+      overallLbl.textContent = pct+'%';
+      overallBar.style.width = pct+'%';
+      
+      // month view
+      mv.innerHTML='';
+      if (state.active==='principles') {
+        const c=document.createElement('div'); c.className='card';
+        c.innerHTML='<div class=\"pill\"><span class=\"inline-dot\"></span><b>Ключевые принципы</b></div><ul class=\"list\"><li>Инсайт каждую неделю</li><li>Измеримое улучшение каждый месяц</li><li>День без гаджетов раз в неделю</li><li>Новый контекст раз в квартал</li></ul>';
+        mv.appendChild(c);
+        return;
+      }
+      const month = state.months.find(x=>x.id===state.active); if (!month) return;
+
+      const head=document.createElement('div'); head.className='card';
+      head.innerHTML = `<div class="pill"><span class="inline-dot"></span><b>${month.title}</b></div><div class="muted">Цель: ${month.goal}</div>`;
+      mv.appendChild(head);
+
+      month.tasks.forEach(task => {
+        // container
+        const box=document.createElement('div'); box.className='task';
+        const daysLeft = task.deadline ? Math.ceil((new Date(task.deadline).getTime() - Date.now())/86400000) : null;
+        const dl = task.deadline ? `&nbsp;<span class="${daysLeft<0?'muted':daysLeft<=3?'':'muted'}">до ${task.deadline}${daysLeft!==null?` (${daysLeft}д)`:''}</span>` : '';
+
+        const summary = document.createElement('summary');
+        summary.innerHTML = `<span class="${task.done?'check done':'check'}" data-check></span><b>${task.text}</b>${dl}`;
+
+        const details = document.createElement('details');
+        details.appendChild(summary);
+
+        // slogan
+        const sl = document.createElement('div');
+        sl.className='slogan';
+        sl.textContent = SLOGANS[task.id] || '';
+        details.appendChild(sl);
+
+        // controls row: timer + calendar + deadline + remind
+        const ctrl = document.createElement('div');
+        ctrl.style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-left:28px;margin:6px 0;";
+        ctrl.innerHTML = `
+          <span class="muted" style="font-size:12px">⏰ Будильник:</span>
+          <select data-min>
+            <option value="25">25 мин</option>
+            <option value="45">45 мин</option>
+            <option value="60">60 мин</option>
+          </select>
+          <button class="btn" data-start>Старт</button>
+          <button class="btn" data-stop style="display:none">Стоп</button>
+          <span class="muted" data-timer>00:00</span>
+          <button class="btn" data-gcal>В Google Календарь</button>
+          <input type="date" data-deadline placeholder="Дедлайн" value="${task.deadline||''}"/>
+          <label class="muted"><input type="checkbox" data-remind ${task.remind?'checked':''}/> напомнить</label>
+        `;
+        details.appendChild(ctrl);
+
+        // checklist
+        const ul = document.createElement('ul'); ul.className='list';
+        if (!task.items || task.items.length===0) seedIfEmpty(task);
+        task.items.forEach(it => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="${it.done?'check done':'check'}" data-sub="${it.id}"></span>${it.text}`;
+          ul.appendChild(li);
+        });
+        details.appendChild(ul);
+
+        // Add new subitem
+        const add = document.createElement('div');
+        add.style="display:flex;gap:6px;align-items:center;padding-left:28px;margin-top:8px;";
+        add.innerHTML = `<input placeholder="Добавить шаг чек-листа" data-new style="flex:1"/><button class="btn" data-add>Добавить</button>`;
+        details.appendChild(add);
+
+        // toggle task handler
+        summary.querySelector('[data-check]').onclick = () => {
+          task.done = !task.done;
+          (task.items||[]).forEach(i=> i.done = task.done);
+          save(); render();
+        };
+
+        // toggle subitems
+        ul.querySelectorAll('[data-sub]').forEach(el => {
+          el.onclick = () => {
+            const id = el.getAttribute('data-sub');
+            const it = task.items.find(x=>x.id===id);
+            it.done = !it.done;
+            task.done = task.items.length>0 && task.items.every(x=>x.done);
+            save(); render();
+          };
+        });
+
+        // add subitem
+        add.querySelector('[data-add]').onclick = () => {
+          const input = add.querySelector('[data-new']);
+          const txt = (input.value||'').trim(); if (!txt) return;
+          task.items.push({ id: task.id+'-i-'+Date.now(), text: txt, done:false });
+          task.done = false;
+          input.value=''; save(); render();
+        };
+
+        // deadline + remind
+        ctrl.querySelector('[data-deadline]').onchange = (e) => {
+          task.deadline = e.target.value || '';
+          save(); render();
+        };
+        ctrl.querySelector('[data-remind]').onchange = (e) => {
+          task.remind = e.target.checked;
+          save();
+          if (task.remind && task.deadline) {
+            const when = new Date(task.deadline).getTime() - Date.now();
+            if ('Notification' in window) {
+              Notification.requestPermission().then(p => {
+                if (p==='granted' && when>0) setTimeout(()=> new Notification('Напоминание • Архитектор таланта', { body: `${task.text} — срок сегодня` }), Math.min(when, 2147483647));
+              });
+            }
+          }
+        };
+
+        // TIMER (simple Pomodoro)
+        const minSel = ctrl.querySelector('[data-min]');
+        const btnStart = ctrl.querySelector('[data-start]');
+        const btnStop = ctrl.querySelector('[data-stop]');
+        const timerLbl = ctrl.querySelector('[data-timer]');
+        let left = 0;
+        let tId = null;
+        function tick() {
+          const m = String(Math.floor(left/60)).padStart(2,'0');
+          const s = String(left%60).padStart(2,'0');
+          timerLbl.textContent = `${m}:${s}`;
+          if (left<=0) {
+            if (tId) { clearInterval(tId); tId=null; btnStart.style.display=''; btnStop.style.display='none'; }
+            // chime
+            try {
+              const ctx = new (window.AudioContext||window.webkitAudioContext)();
+              const osc = ctx.createOscillator(); const gain = ctx.createGain();
+              osc.type='sine'; osc.frequency.value=660;
+              gain.gain.value=0.0001;
+              gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+              gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.2);
+              osc.connect(gain).connect(ctx.destination);
+              osc.start(); osc.stop(ctx.currentTime + 1.25);
+            } catch(e){}
+          }
+        }
+        btnStart.onclick = () => {
+          if (tId) return;
+          left = parseInt(minSel.value||'25',10) * 60;
+          btnStart.style.display='none'; btnStop.style.display='';
+          tick();
+          tId = setInterval(()=>{ left=Math.max(0,left-1); tick(); }, 1000);
+        };
+        btnStop.onclick = () => {
+          if (tId) { clearInterval(tId); tId=null; }
+          left=0; tick();
+          btnStart.style.display=''; btnStop.style.display='none';
+        };
+        tick();
+
+        // Google Calendar
+        ctrl.querySelector('[data-gcal]').onclick = () => {
+          const now = new Date();
+          const start = task.deadline ? new Date(task.deadline + 'T09:00:00') : now;
+          const end = new Date(start.getTime() + parseInt(minSel.value||'25',10)*60000);
+          const url = buildGCalUrl(task.text, start, end, `Задача месяца ${month.id.toUpperCase()}`);
+          window.open(url, '_blank');
+        };
+
+        box.appendChild(details);
+        mv.appendChild(box);
+      });
+    }
+
+    // insights
+    document.getElementById('addInsightBtn').onclick = () => {
+      const input = document.getElementById('insightInput');
+      const t = (input.value||'').trim(); if (!t) return;
+      state.insights = state.insights || [];
+      state.insights.unshift({ id:'ins-'+Date.now(), date:new Date().toISOString().slice(0,10), text:t });
+      input.value=''; save(); renderInsights();
+    };
+    function renderInsights() {
+      const list = document.getElementById('insightList'); list.innerHTML='';
+      if (!state.insights || state.insights.length===0) {
+        const li=document.createElement('li'); li.className='muted'; li.textContent='Пока нет инсайтов — добавь первый.'; list.appendChild(li);
+      } else {
+        state.insights.forEach(i => {
+          const li=document.createElement('li'); li.innerHTML=`<span class="muted">${i.date}</span> ${i.text}`; list.appendChild(li);
+        });
+      }
+    }
+
+    // export/import/reset
+    document.getElementById('exportBtn').onclick = () => {
+      const data = JSON.stringify(state, null, 2);
+      const url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
+      const a = document.createElement('a'); a.href=url; a.download='architect-zen-state.json'; a.click(); URL.revokeObjectURL(url);
+    };
+    document.getElementById('importInput').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        const text = await f.text(); const parsed = JSON.parse(text);
+        if (!parsed.months) throw new Error('bad file');
+        Object.assign(state, parsed);
+        save(); render(); renderInsights();
+        alert('Импорт выполнен');
+      } catch { alert('Не удалось импортировать'); }
+    };
+    document.getElementById('resetBtn').onclick = () => {
+      if (confirm('Сбросить прогресс?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); }
+    };
+
+    // service worker + notifications
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+    if ('Notification' in window && Notification.permission==='default') { Notification.requestPermission().catch(()=>{}); }
+
+    // initial render
+    render(); renderInsights();
+  </script>
+</body>
+</html>
