@@ -1,13 +1,14 @@
+
 <!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Архитектор таланта — Zen</title>
-  <link rel="manifest" href="manifest.json">
+  <title>Архитектор таланта — Zen (Fix)</title>
+  <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#faf7f2">
-  <link rel="icon" sizes="192x192" href="icon-192.png">
-  <link rel="icon" sizes="512x512" href="icon-512.png">
+  <link rel="icon" sizes="192x192" href="./icon-192.png">
+  <link rel="icon" sizes="512x512" href="./icon-512.png">
   <style>
     :root { --paper:#FAF7F2; --ink:#1A1A1A; --accent:#BB2A2A; --stroke:#E5D8C8; }
     html,body { margin:0; padding:0; background:var(--paper); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -34,19 +35,22 @@
     .list { padding-left: 18px; }
     .pill { display:inline-flex; align-items:center; gap:8px; }
     input, select { padding:8px 10px; border:1px solid var(--stroke); border-radius:10px; }
+    .diag { font-size:12px; opacity:.8; }
+    .diag .ok { color:#2e7d32; } .diag .bad { color:#bb2a2a; }
   </style>
 </head>
 <body class="wave">
   <div class="wrap">
     <div class="row">
       <div>
-        <div class="title">建築家の道 — Архитектор таланта · Zen Edition</div>
-        <div class="muted">6-месячная программа: чек-листы, хоку, таймер, Google Calendar</div>
+        <div class="title">建築家の道 — Архитектор таланта · Zen (Fix)</div>
+        <div class="muted">Чек-листы, хоку, таймер, GCal · безопасная сборка с диагностикой</div>
       </div>
       <div class="row">
         <button class="btn" id="exportBtn">Экспорт</button>
         <label class="btn">Импорт <input id="importInput" type="file" accept="application/json" style="display:none"></label>
         <button class="btn" id="resetBtn">Сброс</button>
+        <button class="btn" id="resetSwBtn" title="Стереть SW и кэши">Очистить SW/кэш</button>
       </div>
     </div>
 
@@ -56,6 +60,7 @@
         <div class="muted" id="overallLbl">0%</div>
       </div>
       <div class="progress"><div id="overallBar"></div></div>
+      <div class="diag" id="diag"></div>
     </div>
 
     <div class="card" style="margin-top:10px">
@@ -72,7 +77,29 @@
   </div>
 
   <script>
-    // --------- DATA (months, seed checklists, slogans) ----------
+    const diag = document.getElementById('diag');
+    function setDiag(lines) { diag.innerHTML = lines.map(x => `<div>${x}</div>`).join(''); }
+    (function initDiag(){
+      const lines = [];
+      lines.push(navigator.onLine ? '<span class="ok">Онлайн</span>' : '<span class="bad">Офлайн</span>');
+      lines.push(('serviceWorker' in navigator) ? '<span class="ok">SW поддерживается</span>' : '<span class="bad">SW не поддерживается</span>');
+      lines.push(('Notification' in window) ? '<span class="ok">Уведомления поддерживаются</span>' : '<span class="bad">Нет уведомлений</span>');
+      fetch('./manifest.json?check='+Date.now()).then(r=>lines.push(r.ok?'<span class="ok">manifest.json ок</span>':'<span class="bad">manifest.json нет</span>')).catch(()=>lines.push('<span class="bad">manifest.json нет</span>')).finally(()=> setDiag(lines));
+    })();
+
+    document.getElementById('resetSwBtn').onclick = async () => {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs) await r.unregister();
+        }
+        const keys = await caches.keys();
+        for (const k of keys) await caches.delete(k);
+        alert('SW и кэши очищены. Перезагружаю...');
+        location.reload();
+      } catch(e){ alert('Не удалось очистить SW: '+e); }
+    };
+
     const SEED = {
       m1t1: ["Собрать список проектов","Карта ролей и времени","Выявить зависимости от меня","Найти точки автоматизации","Решения и владельцы"],
       m1t2: ["MindMap: люди/процессы/деньги/цели","Входы и выходы процессов","Бутылочные горлышки","Метрики по ключевым узлам","2 эксперимента на улучшение"],
@@ -91,7 +118,7 @@
       m5t2: ["KPIs: время/прибыль/качество","Целевые значения","Дашборд","Еженедельный обзор","Триггеры оповещений"],
       m5t3: ["Карта потока","Идентифицировать ограничение","Эксплуатировать","Подчинить остальные","Повысить/повторить"],
       m6t1: ["RACI по ключевым зонам","Обучение и ввод","Регламенты","Обратная связь","Исключить себя из операционки"],
-      m6t2: ["3 принципа","3 шаблона","3 инструмента","Общий документ","Месячный обзор"],
+      m6t2: ["Три принципа","Три шаблона","Три инструмента","Общий документ","Месячный обзор"],
       m6t3: ["Выбор новой сферы","Адаптация плейбука","Первый клиент/пилот","Пакетирование предложения","План масштабирования"],
     };
     const SLOGANS = {
@@ -115,6 +142,7 @@
       m6t2: "Три камня — очаг пути.\n「三つの石に、道の火」",
       m6t3: "Новая пристань — тот же океан.\n「港は新しくとも、海は同じ」",
     };
+
     const MONTHS = [
       { id:'m1', title:'Месяц 1 — Диагностика и фокус', goal:'Понять текущее состояние и выстроить фундамент системного мышления.',
         metrics:['1 карта систем','10+ идей улучшений'],
@@ -161,16 +189,16 @@
         ]},
     ];
 
-    const STORAGE_KEY = 'ta_zen_state_v1';
+    const STORAGE_KEY = 'ta_zen_fix_state_v1';
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || { months: MONTHS, insights: [], active: 'm1' };
+
     function seedIfEmpty(task) {
       if (!task.items || task.items.length === 0) {
         task.items = (SEED[task.id] || ["Определить шаги","Сделать","Проверить","Зафиксировать"]).map((txt,i)=>({ id: task.id+'-seed-'+i, text: txt, done: false }));
       }
     }
-    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || { months: MONTHS, insights: [], active: 'm1' };
     state.months.forEach(m => m.tasks.forEach(seedIfEmpty));
 
-    // --------- Helpers ----------
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     function progressAll() {
       const all = state.months.flatMap(m=>m.tasks);
@@ -185,14 +213,12 @@
       return `https://calendar.google.com/calendar/u/0/r/eventedit?text=${encodeURIComponent(title)}&dates=${s}/${e}&details=${encodeURIComponent(details)}`;
     }
 
-    // --------- Render ----------
     const tabs = document.getElementById('tabs');
     const mv = document.getElementById('monthView');
     const overallLbl = document.getElementById('overallLbl');
     const overallBar = document.getElementById('overallBar');
 
     function render() {
-      // tabs
       tabs.innerHTML='';
       [...state.months.map(m=>m.id), 'principles'].forEach(id => {
         const b=document.createElement('button');
@@ -202,16 +228,14 @@
         tabs.appendChild(b);
       });
 
-      // progress
       const pct = progressAll();
       overallLbl.textContent = pct+'%';
       overallBar.style.width = pct+'%';
-      
-      // month view
+
       mv.innerHTML='';
       if (state.active==='principles') {
         const c=document.createElement('div'); c.className='card';
-        c.innerHTML='<div class=\"pill\"><span class=\"inline-dot\"></span><b>Ключевые принципы</b></div><ul class=\"list\"><li>Инсайт каждую неделю</li><li>Измеримое улучшение каждый месяц</li><li>День без гаджетов раз в неделю</li><li>Новый контекст раз в квартал</li></ul>';
+        c.innerHTML='<div class="pill"><span class="inline-dot"></span><b>Ключевые принципы</b></div><ul class="list"><li>Инсайт каждую неделю</li><li>Измеримое улучшение каждый месяц</li><li>День без гаджетов раз в неделю</li><li>Новый контекст раз в квартал</li></ul>';
         mv.appendChild(c);
         return;
       }
@@ -222,7 +246,6 @@
       mv.appendChild(head);
 
       month.tasks.forEach(task => {
-        // container
         const box=document.createElement('div'); box.className='task';
         const daysLeft = task.deadline ? Math.ceil((new Date(task.deadline).getTime() - Date.now())/86400000) : null;
         const dl = task.deadline ? `&nbsp;<span class="${daysLeft<0?'muted':daysLeft<=3?'':'muted'}">до ${task.deadline}${daysLeft!==null?` (${daysLeft}д)`:''}</span>` : '';
@@ -233,22 +256,13 @@
         const details = document.createElement('details');
         details.appendChild(summary);
 
-        // slogan
-        const sl = document.createElement('div');
-        sl.className='slogan';
-        sl.textContent = SLOGANS[task.id] || '';
-        details.appendChild(sl);
+        const sl = document.createElement('div'); sl.className='slogan'; sl.textContent = SLOGANS[task.id] || ''; details.appendChild(sl);
 
-        // controls row: timer + calendar + deadline + remind
         const ctrl = document.createElement('div');
         ctrl.style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-left:28px;margin:6px 0;";
         ctrl.innerHTML = `
           <span class="muted" style="font-size:12px">⏰ Будильник:</span>
-          <select data-min>
-            <option value="25">25 мин</option>
-            <option value="45">45 мин</option>
-            <option value="60">60 мин</option>
-          </select>
+          <select data-min><option value="25">25 мин</option><option value="45">45 мин</option><option value="60">60 мин</option></select>
           <button class="btn" data-start>Старт</button>
           <button class="btn" data-stop style="display:none">Стоп</button>
           <span class="muted" data-timer>00:00</span>
@@ -258,7 +272,6 @@
         `;
         details.appendChild(ctrl);
 
-        // checklist
         const ul = document.createElement('ul'); ul.className='list';
         if (!task.items || task.items.length===0) seedIfEmpty(task);
         task.items.forEach(it => {
@@ -268,20 +281,16 @@
         });
         details.appendChild(ul);
 
-        // Add new subitem
         const add = document.createElement('div');
         add.style="display:flex;gap:6px;align-items:center;padding-left:28px;margin-top:8px;";
         add.innerHTML = `<input placeholder="Добавить шаг чек-листа" data-new style="flex:1"/><button class="btn" data-add>Добавить</button>`;
         details.appendChild(add);
 
-        // toggle task handler
         summary.querySelector('[data-check]').onclick = () => {
           task.done = !task.done;
           (task.items||[]).forEach(i=> i.done = task.done);
           save(); render();
         };
-
-        // toggle subitems
         ul.querySelectorAll('[data-sub]').forEach(el => {
           el.onclick = () => {
             const id = el.getAttribute('data-sub');
@@ -291,57 +300,50 @@
             save(); render();
           };
         });
-
-        // add subitem
         add.querySelector('[data-add]').onclick = () => {
-          const input = add.querySelector('[data-new']);
+          const input = add.querySelector('[data-new'] );
           const txt = (input.value||'').trim(); if (!txt) return;
           task.items.push({ id: task.id+'-i-'+Date.now(), text: txt, done:false });
           task.done = false;
           input.value=''; save(); render();
         };
-
-        // deadline + remind
         ctrl.querySelector('[data-deadline]').onchange = (e) => {
           task.deadline = e.target.value || '';
           save(); render();
         };
         ctrl.querySelector('[data-remind]').onchange = (e) => {
-          task.remind = e.target.checked;
-          save();
-          if (task.remind && task.deadline) {
-            const when = new Date(task.deadline).getTime() - Date.now();
-            if ('Notification' in window) {
-              Notification.requestPermission().then(p => {
-                if (p==='granted' && when>0) setTimeout(()=> new Notification('Напоминание • Архитектор таланта', { body: `${task.text} — срок сегодня` }), Math.min(when, 2147483647));
-              });
-            }
+          task.remind = e.target.checked; save();
+          if (task.remind && task.deadline && 'Notification' in window) {
+            Notification.requestPermission().then(p => {
+              const when = new Date(task.deadline).getTime() - Date.now();
+              if (p==='granted' && when>0) setTimeout(()=> new Notification('Напоминание • Архитектор таланта', { body: `${task.text} — срок сегодня` }), Math.min(when, 2147483647));
+            });
           }
         };
 
-        // TIMER (simple Pomodoro)
         const minSel = ctrl.querySelector('[data-min]');
         const btnStart = ctrl.querySelector('[data-start]');
         const btnStop = ctrl.querySelector('[data-stop]');
         const timerLbl = ctrl.querySelector('[data-timer]');
-        let left = 0;
-        let tId = null;
+        let left = 0; let tId = null;
         function tick() {
           const m = String(Math.floor(left/60)).padStart(2,'0');
           const s = String(left%60).padStart(2,'0');
           timerLbl.textContent = `${m}:${s}`;
           if (left<=0) {
             if (tId) { clearInterval(tId); tId=null; btnStart.style.display=''; btnStop.style.display='none'; }
-            // chime
             try {
-              const ctx = new (window.AudioContext||window.webkitAudioContext)();
-              const osc = ctx.createOscillator(); const gain = ctx.createGain();
-              osc.type='sine'; osc.frequency.value=660;
-              gain.gain.value=0.0001;
-              gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 0.05);
-              gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.2);
-              osc.connect(gain).connect(ctx.destination);
-              osc.start(); osc.stop(ctx.currentTime + 1.25);
+              const AC = window.AudioContext || window.webkitAudioContext;
+              if (AC) {
+                const ctx = new AC();
+                const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                osc.type='sine'; osc.frequency.value=660;
+                gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.2);
+                osc.connect(gain).connect(ctx.destination);
+                osc.start(); osc.stop(ctx.currentTime + 1.25);
+              }
             } catch(e){}
           }
         }
@@ -352,20 +354,14 @@
           tick();
           tId = setInterval(()=>{ left=Math.max(0,left-1); tick(); }, 1000);
         };
-        btnStop.onclick = () => {
-          if (tId) { clearInterval(tId); tId=null; }
-          left=0; tick();
-          btnStart.style.display=''; btnStop.style.display='none';
-        };
-        tick();
+        btnStop.onclick = () => { if (tId) { clearInterval(tId); tId=null; } left=0; tick(); btnStart.style.display=''; btnStop.style.display='none'; };
 
-        // Google Calendar
         ctrl.querySelector('[data-gcal]').onclick = () => {
           const now = new Date();
           const start = task.deadline ? new Date(task.deadline + 'T09:00:00') : now;
           const end = new Date(start.getTime() + parseInt(minSel.value||'25',10)*60000);
           const url = buildGCalUrl(task.text, start, end, `Задача месяца ${month.id.toUpperCase()}`);
-          window.open(url, '_blank');
+          const w = window.open(url, '_blank'); if (!w) location.href = url;
         };
 
         box.appendChild(details);
@@ -373,7 +369,6 @@
       });
     }
 
-    // insights
     document.getElementById('addInsightBtn').onclick = () => {
       const input = document.getElementById('insightInput');
       const t = (input.value||'').trim(); if (!t) return;
@@ -392,11 +387,10 @@
       }
     }
 
-    // export/import/reset
     document.getElementById('exportBtn').onclick = () => {
       const data = JSON.stringify(state, null, 2);
       const url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
-      const a = document.createElement('a'); a.href=url; a.download='architect-zen-state.json'; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href=url; a.download='architect-state.json'; a.click(); URL.revokeObjectURL(url);
     };
     document.getElementById('importInput').onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
@@ -412,12 +406,14 @@
       if (confirm('Сбросить прогресс?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); }
     };
 
-    // service worker + notifications
-    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(()=>{});
+      });
+    }
     if ('Notification' in window && Notification.permission==='default') { Notification.requestPermission().catch(()=>{}); }
 
-    // initial render
-    render(); renderInsights();
+    render(); (function(){ const list = document.getElementById('insightList'); list.innerHTML='<li class="muted">Пока нет инсайтов — добавь первый.</li>'; })();
   </script>
 </body>
 </html>
